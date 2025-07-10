@@ -52,7 +52,7 @@ def extract_entities(text: str) -> dict:
     
     return entities
 
-""""""
+"""
 # Quick test
 
 if __name__ == "__main__":
@@ -62,3 +62,4 @@ if __name__ == "__main__":
     print(f"Names: {entities['names']}")  # Should be ['John Doe']
     print(f"Dates: {entities['dates']}")  # Should be ['12/31/2023']
     print(f"Addresses: {entities['addresses']}")  # Should be ['123 Main St, Springfield.']
+"""

@@ -1,9 +1,16 @@
 from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+import tempfile, uuid
+from PIL import Image
+from pdf2image import convert_from_path
+
+from .olm_wrapper import process_olmocr_image
+from .ocr_processor import extract_entities
+from .table_parser import extract_tables
 
 app = FastAPI()
 
-# Allow frontend connection
+# Allow frontend access
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -11,77 +18,63 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Dummy response structure -> OLM OCR response to be replaced here
-dummy_response = {
-    "entities": {
-        "names": ["John Doe"],
-        "dates": ["2023-01-01"],
-        "addresses": ["123 Main St"]
-    },
-    "tables": [{
-        "headers": ["Product", "Price"],
-        "rows": [["Book", "$10"], ["Pen", "$1"]]
-    }]
-}
-
-# USP: Auto-rotation for scanned docs
+# Auto-rotate scanned docs
 def auto_rotate_image(image: Image) -> Image:
     try:
         exif = image.getexif()
-        if exif:
-            orientation = exif.get(0x0112)
-            rotate_values = {
-                3: Image.ROTATE_180,
-                6: Image.ROTATE_270,
-                8: Image.ROTATE_90
-            }
-            if orientation in rotate_values:
-                return image.transpose(rotate_values[orientation])
+        orientation = exif.get(0x0112)
+        rotate_values = {
+            3: Image.ROTATE_180,
+            6: Image.ROTATE_270,
+            8: Image.ROTATE_90
+        }
+        if orientation in rotate_values:
+            return image.transpose(rotate_values[orientation])
     except:
         pass
     return image
 
 @app.post("/process")
 async def process_file(file: UploadFile = File(...)):
-    # USP: Unique process ID for tracing
     process_id = str(uuid.uuid4())
-    
-    # USP: Multi-page handling (first 3 pages)
-    images = []
-    if file.filename.lower().endswith('.pdf'):
-        images = convert_from_path(temp_file.name, first_page=1, last_page=3)
-        partial = len(images) > 3  # Flag if document truncated
-    else:
-        images = [Image.open(temp_file.name)]
-        partial = False
-    
-    results = []
-    for img in images:
-        # USP: Auto-rotation
-        img = auto_rotate_image(img)
-        
-        # Run OCR
-        img_np = np.array(img)  # Convert to numpy array
-        ocr_result = OlmOcr()(img_np)
-        corrected_text = correct_ocr_text(ocr_result.get("text", ""))
-        
-        # Extract data
-        entities = extract_entities(corrected_text)
-        tables = extract_tables(ocr_result)
-        
-        results.append({
-            "entities": entities,
-            "tables": tables,
-            "raw_text": corrected_text[:500] + "..."  # Partial preview
-        })
-    
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+        tmp.write(await file.read())
+        tmp.flush()
+
+        results = []
+        try:
+            # Try converting PDF to image (first 3 pages)
+            images = convert_from_path(tmp.name, first_page=1, last_page=3)
+        except:
+            # Fallback to single image
+            images = [Image.open(tmp.name)]
+
+        for page_num, img in enumerate(images, start=1):
+            try:
+                img = auto_rotate_image(img)
+                raw_text = process_olmocr_image(img)
+
+                # Parse the raw_text as plain text, send to extractors
+                entities = extract_entities(raw_text)
+                tables = extract_tables({"blocks": []})  # Replace with parsed JSON if needed
+
+                results.append({
+                    "page": page_num,
+                    "text": raw_text,
+                    "entities": entities,
+                    "tables": tables,
+                })
+
+            except Exception as e:
+                results.append({
+                    "page": page_num,
+                    "error": str(e)
+                })
+
     return {
         "process_id": process_id,
         "pages": results,
-        "partial": partial,
-        "page_count": len(images)
+        "partial": len(results) < 3,
+        "page_count": len(results)
     }
-
-@app.post("/process")
-async def process_file(file: UploadFile = File(...)):
-    return dummy_response
