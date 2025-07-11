@@ -11,9 +11,13 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Prompt
 DEFAULT_PROMPT = (
-    "Extract all text, names, dates, addresses, form fields and their values, "
-    "tables, and document structure from this document image. Return the output as structured JSON."
+    "Extract structured data from this document image. "
+    "Return output as JSON with a top-level key 'blocks'. "
+    "Each block should include 'type' (e.g., 'table', 'paragraph'), "
+    "and for tables, include 'children' with 'row_index', 'column_index', and 'text'. "
+    "Do not return natural text. Do not include LaTeX formatting. Only return clean JSON."
 )
+
 
 # Lazy loader
 def load_olmocr_model():

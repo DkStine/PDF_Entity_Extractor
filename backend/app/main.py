@@ -1,3 +1,4 @@
+import json
 from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 import tempfile, uuid
@@ -44,20 +45,36 @@ async def process_file(file: UploadFile = File(...)):
 
         results = []
         try:
-            # Try converting PDF to image (first 3 pages)
             images = convert_from_path(tmp.name, first_page=1, last_page=3)
         except:
-            # Fallback to single image
             images = [Image.open(tmp.name)]
 
         for page_num, img in enumerate(images, start=1):
             try:
                 img = auto_rotate_image(img)
+
+                # Debugging/main process starts here
                 raw_text = process_olmocr_image(img)
 
-                # Parse the raw_text as plain text, send to extractors
-                entities = extract_entities(raw_text)
-                tables = extract_tables({"blocks": []})  # Replace with parsed JSON if needed
+                # OLMOCR returns the below
+                """
+                {"blocks": [{"type": "paragraph", "text": "NAME: Diganta Das\n\nEMAIL: Das9@gmail.com\n\nAddress: Kamkole, Woxsen University, HYD-202345\n\nDate: 31st December 2012\n\nTable of Project:\n\n| Sl No. | Name       | Projects     | Remarks |\n|--------|------------|--------------|---------|\n| 1.     | Topper     | AI summer    | High    |\n| 2.     | Backbencher| AI Subtractor| Low     |"}
+                """
+                print(f"OCR Raw Output: {raw_text}")
+
+                # Step 1: Try parsing the OCR string
+                try:
+                    parsed_json = json.loads(raw_text)
+                except json.JSONDecodeError:
+                    parsed_json = {"blocks": [{"type": "paragraph", "text": raw_text}]}
+
+                # Somehow we are not being able to convert it properly into JSON
+                # Step 2: Extract all 'text' fields into plain string
+                combined_text = "\n".join([blk.get("text", "") for blk in parsed_json.get("blocks", [])])
+
+                # Step 3: Entity & Table Extraction
+                entities = extract_entities(combined_text)
+                tables = extract_tables(parsed_json)
 
                 results.append({
                     "page": page_num,

@@ -32,25 +32,28 @@ def validate_address(addr: str) -> bool:
 
 # Core entity extraction
 def extract_entities(text: str) -> dict:
+    text = correct_ocr_text(text)  # <-- Add correction step here
     doc = nlp(text)
     entities = {"names": [], "dates": [], "addresses": []}
-    
+
     # Names extraction
     entities["names"] = [ent.text for ent in doc.ents if ent.label_ == "PERSON"]
-    
+
     # Date extraction
     date_patterns = [
         r"\b\d{1,2}[-/]\d{1,2}[-/]\d{2,4}\b",
-        r"\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* \d{1,2}, \d{4}\b"
+        r"\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* \d{1,2}, \d{4}\b",
+        r"\d{1,2}(?:st|nd|rd|th)?\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}"
     ]
     for pattern in date_patterns:
         entities["dates"].extend(re.findall(pattern, text))
-    
+
     # Address extraction with validation
     address_candidates = re.findall(r"\d+ [\w\s,]{10,50}", text)
     entities["addresses"] = [addr.strip() for addr in address_candidates if validate_address(addr)]
-    
+
     return entities
+
 
 """
 # Quick test
