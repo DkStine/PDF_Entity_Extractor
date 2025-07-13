@@ -3,7 +3,7 @@ import axios from 'axios';
 // Create reusable API instance
 const api = axios.create({
   baseURL: 'http://localhost:8000',
-  timeout: 30000, // 30 seconds timeout
+  timeout: 300000, // 30 seconds timeout
 });
 
 export const processDocument = async (file) => {
