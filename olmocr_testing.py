@@ -1,3 +1,5 @@
+# This is OLMOCR test file that is used to check weather OLMOCR is successfully installed in your system. We have used cpu based installation as GPU based installation had lot of conflicts and dependency issue 
+
 import torch
 import base64
 import urllib.request
