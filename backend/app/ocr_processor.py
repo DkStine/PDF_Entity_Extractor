@@ -23,8 +23,16 @@ def correct_ocr_text(text: str) -> str:
 # Address validation
 def validate_address(addr: str) -> bool:
     patterns = [
-        r"\d+\s+[\w\s]+(?:St|Street|Ave|Avenue|Blvd|Boulevard|Rd|Road)(?:,\s*[\w\s]+)*",
-        r"PO Box \d+"
+        # US-style
+        r"(?i)\b\d{1,5}(?:\s*-\s*\d{1,5})?\s+[\w\s.,#-]+,\s*[A-Za-z\s]+,\s*[A-Za-z]{2}\s*\d{5}(?:-\d{4})?\b",
+        r"(?i)\b\d{1,5}(?:[/-]?\d{0,5})?\s*[\w\s.,#-]+,\s*[A-Za-z\s]+,\s*[A-Za-z\s]{2,}\s*\d{6}\b",
+        # r"^(\d+) ?([A-Za-z](?= ))? (.?) ([^ ]+?) ?((?<= )APT)? ?((?<= )\d)?$",
+        # r"\d+\s+[\w\s]+(?:St|Street|Ave|Avenue|Blvd|Boulevard|Rd|Road)(?:,\s*[\w\s]+)*",
+        # r"PO Box \d+",
+        # # Indian-style with city + PIN (e.g., HYD-500001 or Hyderabad 500001)
+        r"(?:[A-Za-z\s]+,)\s[A-Za-z\s]\s(?:[A-Z]{2,}-)?\d{6}\b",  
+        # # Optional: Generic comma-separated with PIN
+        r"([A-Za-z0-9\s,-]+),?\s+\d{6}"
     ]
     addr = addr.strip()
     return any(re.search(p, addr, re.IGNORECASE) for p in patterns)
@@ -66,10 +74,10 @@ def extract_entities(text: str) -> dict:
     return entities
 
 # Test
+"""
 if __name__ == "__main__":
     test_text = (
-        "Name: John Doe\n\nEmail: john.doe-654@example.co.in\n\n"
-        "Address: 123 Main St, Springfield, USA-White house\n\nDate: 12th Jan 2023"
+        "NAME: Diganta Das\n\nEMAIL: Das9@gmail.com\n\nAddress: Woxsen, HYD-456822\n\nDate: 31st December 201 2\n\nTable of Project:\n\n] Sl No. | Name ❘ Projects | Remarks |\n|--------|- -| - ----|\n| 1. Topper | AI summer | High | Backbencher AI Subtractor| Low |"
     )
     entities = extract_entities(test_text)
     print("Test Results:")
@@ -77,3 +85,4 @@ if __name__ == "__main__":
     print(f"Emails: {entities['emails']}")
     print(f"Dates: {entities['dates']}")
     print(f"Addresses: {entities['addresses']}")
+"""
