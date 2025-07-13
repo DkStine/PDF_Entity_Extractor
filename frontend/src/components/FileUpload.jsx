@@ -1,7 +1,8 @@
+// src/components/FileUpload.jsx
 import React from 'react';
 import { useDropzone } from 'react-dropzone';
 
-export default ({ onUpload }) => {
+export default function FileUpload({ onUpload }) {
   const { getRootProps, getInputProps } = useDropzone({
     accept: {
       'application/pdf': ['.pdf'],
@@ -18,5 +19,4 @@ export default ({ onUpload }) => {
       <p>📁 Drag & drop PDF/image (max 10MB)</p>
     </div>
   );
-};
-
+}
