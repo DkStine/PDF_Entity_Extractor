@@ -1,7 +1,6 @@
 import re, spacy
 
-# Load spaCy model (optimized for NER)
-# Disable unnecessary pipeline components for faster processing
+# Load spaCy model
 try:
     nlp = spacy.load("en_core_web_sm", disable=["parser", "lemmatizer"])
 except OSError:
@@ -9,60 +8,72 @@ except OSError:
     download("en_core_web_sm")
     nlp = spacy.load("en_core_web_sm", disable=["parser", "lemmatizer"])
 
-# USP: Enhanced auto-correction
+# OCR correction
 OCR_CORRECTIONS = {
-    "0": "O", "1": "I", "5t": "St", "|": "I",
-    "vv": "w", "[]": "o", "``": "\"", "''": "\""
+    "5t": "St", "|": "I", "vv": "w", "[]": "o", "``": "\"", "''": "\""
 }
 
 def correct_ocr_text(text: str) -> str:
     for wrong, right in OCR_CORRECTIONS.items():
         text = text.replace(wrong, right)
-    return text
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r"\n{2,}", "\n", text)
+    return text.strip()
 
-# USP: Address validation
+# Address validation
 def validate_address(addr: str) -> bool:
     patterns = [
-        r"\d+\s+[\w\s]+St(?:reet)?", 
-        r"\d+\s+[\w\s]+Ave(?:nue)?",
-        r"\d+\s+[\w\s]+Blvd",
+        r"\d+\s+[\w\s]+(?:St|Street|Ave|Avenue|Blvd|Boulevard|Rd|Road)(?:,\s*[\w\s]+)*",
         r"PO Box \d+"
     ]
+    addr = addr.strip()
     return any(re.search(p, addr, re.IGNORECASE) for p in patterns)
 
-# Core entity extraction
+# Entity extraction
 def extract_entities(text: str) -> dict:
-    text = correct_ocr_text(text)  # <-- Add correction step here
-    doc = nlp(text)
-    entities = {"names": [], "dates": [], "addresses": []}
+    corrected_text = correct_ocr_text(text)
+    doc = nlp(corrected_text)
+    entities = {"names": [], "emails": [], "dates": [], "addresses": []}
 
-    # Names extraction
-    entities["names"] = [ent.text for ent in doc.ents if ent.label_ == "PERSON"]
+    # Extract names
+    if not entities["names"]:
+        doc = nlp(corrected_text)
+        for ent in doc.ents:
+            if ent.label_ == "PERSON":
+                name = ent.text.strip()
+                if "\n" not in name and any(char.isalpha() for char in name):
+                    entities["names"].append(name)
 
-    # Date extraction
-    date_patterns = [
-        r"\b\d{1,2}[-/]\d{1,2}[-/]\d{2,4}\b",
-        r"\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* \d{1,2}, \d{4}\b",
-        r"\d{1,2}(?:st|nd|rd|th)?\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}"
-    ]
-    for pattern in date_patterns:
-        entities["dates"].extend(re.findall(pattern, text))
+    # Emails
+    email_pattern = r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
+    entities["emails"] = re.findall(email_pattern, corrected_text)
 
-    # Address extraction with validation
-    address_candidates = re.findall(r"\d+ [\w\s,]{10,50}", text)
-    entities["addresses"] = [addr.strip() for addr in address_candidates if validate_address(addr)]
+    # Dates and addresses line-by-line
+    for line in corrected_text.splitlines():
+        line = line.strip()
+        if line.lower().startswith("name:"):
+            name_value = line.split(":", 1)[-1].strip()
+            if name_value and all(part.isalpha() or part == '.' for part in name_value.split()):
+                entities["names"].append(name_value)
+        if line.lower().startswith(("date:",)):
+            date_value = line.split(":", 1)[-1].strip()
+            entities["dates"].append(date_value)
+        elif line.lower().startswith(("address:", "addresses:")):
+            address_value = line.split(":", 1)[-1].strip()
+            if validate_address(address_value):
+                entities["addresses"].append(address_value)
 
     return entities
 
-
-"""
-# Quick test
-
+# Test
 if __name__ == "__main__":
-    test_text = "John Doe will visit on 12/31/2023. Address: 123 Main St, Springfield."
+    test_text = (
+        "Name: John Doe\n\nEmail: john.doe-654@example.co.in\n\n"
+        "Address: 123 Main St, Springfield, USA-White house\n\nDate: 12th Jan 2023"
+    )
     entities = extract_entities(test_text)
     print("Test Results:")
-    print(f"Names: {entities['names']}")  # Should be ['John Doe']
-    print(f"Dates: {entities['dates']}")  # Should be ['12/31/2023']
-    print(f"Addresses: {entities['addresses']}")  # Should be ['123 Main St, Springfield.']
-"""
+    print(f"Names: {entities['names']}")
+    print(f"Emails: {entities['emails']}")
+    print(f"Dates: {entities['dates']}")
+    print(f"Addresses: {entities['addresses']}")
