@@ -1,62 +1,73 @@
 import { useState } from 'react';
-import FileUpload from '../../frontend/src/components/FileUpload';
-import DocumentPreview from '../../frontend/src/components/DocumentPreview';
-import EntityTable from '../../frontend/src/components/EntityTable';
-import TableRenderer from '../../frontend/src/components/TableRenderer';
-import axios from 'axios';
+import FileUpload from './components/FileUpload';
+import DocumentPreview from './components/DocumentPreview';
+import Pipeline from './components/Pipeline';
+import ResultsDisplay from './components/ResultsDisplay';
+import { showToast, NotificationSystem } from './components/NotificationSystem';
+import { processDocument } from './services/api';
 
 function App() {
+  // State from both versions
   const [results, setResults] = useState(null);
-  const [viewMode, setViewMode] = useState("all"); // 'entities' | 'tables' | 'structure'
-  const [currentFile, setCurrentFile] = useState(null); // Added to fix currentFile
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [currentFile, setCurrentFile] = useState(null);
+  const [viewMode, setViewMode] = useState("all"); // 'all' | 'entities' | 'tables'
 
-  const handleUpload = async (file) => {
+  // Calculate pipeline status (visualization version)
+  const pipelineStatus = 
+    isLoading ? 'processing' : 
+    error ? 'error' : 
+    results ? 'complete' : 'idle';
+
+  // Unified upload handler (merged logic)
+  const handleFileUpload = async (file) => {
+    setIsLoading(true);
+    setError(null);
+    setCurrentFile(file);
+    showToast.processing('Processing document...');
+    
     try {
-      setCurrentFile(file); // Store the file
-      const formData = new FormData();
-      formData.append('file', file);
-      const response = await axios.post('http://localhost:8000/process', formData);
-      setResults(response.data);
-    } catch (error) {
-      console.error('Error uploading file:', error);
-      setResults(null);
+      const data = await processDocument(file);
+      showToast.dismiss();
+      showToast.success('Document processed successfully!');
+      setResults(data);
+    } catch (err) {
+      showToast.dismiss();
+      showToast.error(err.message || 'Processing failed');
+      setError(err.message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const exportCSV = (data) => {
-    if (!data || (!data.entities && !data.tables)) {
-      console.log('No data to export');
+  // CSV Export (teammate's version - modified)
+  const exportCSV = () => {
+    if (!results) {
+      showToast.error('No data to export');
       return;
     }
-    // Basic CSV export for entities or tables
+
     let csvContent = 'data:text/csv;charset=utf-8,';
-    if (data.entities && viewMode !== 'tables') {
-      csvContent += 'ID,Name,Type,Value\n';
-      data.entities.forEach((entity) => {
-        const row = [
-          entity.id || '',
-          entity.name || '',
-          entity.type || '',
-          entity.value || '',
-        ].map((val) => `"${val}"`).join(',');
-        csvContent += row + '\n';
-      });
-    } else if (data.tables && viewMode === 'tables') {
-      data.tables.forEach((table, index) => {
-        csvContent += `Table ${index + 1}\n`;
-        const headers = table[0] && typeof table[0] === 'object' && !Array.isArray(table[0])
-          ? Object.keys(table[0])
-          : table[0] || ['Column 1', 'Column 2'];
-        csvContent += headers.map((h) => `"${h}"`).join(',') + '\n';
-        table.forEach((row) => {
-          const rowData = Array.isArray(row)
-            ? row
-            : headers.map((h) => row[h] || '');
-          csvContent += rowData.map((val) => `"${val}"`).join(',') + '\n';
+    csvContent += 'Type,Value,Page\n';
+    
+    results.pages.forEach((page, pageIndex) => {
+      // Export entities
+      Object.entries(page.entities).forEach(([type, items]) => {
+        items.forEach(value => {
+          csvContent += `"${type}","${value}",${pageIndex + 1}\n`;
         });
-        csvContent += '\n';
       });
-    }
+      
+      // Export tables
+      page.tables.forEach((table, tableIndex) => {
+        table.forEach(row => {
+          const rowData = Object.values(row).map(val => `"${val}"`).join(',');
+          csvContent += `"Table ${tableIndex+1}",${rowData},${pageIndex + 1}\n`;
+        });
+      });
+    });
+    
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
@@ -67,24 +78,92 @@ function App() {
   };
 
   return (
-    <div className="p-8 max-w-4xl mx-auto">
-      <h1 className="text-2xl font-bold mb-6">Data Extractor</h1>
-      <FileUpload onUpload={handleUpload} />
-      {results && (
-        <pre className="mt-6 bg-gray-100 p-4 rounded">
-          {JSON.stringify(results, null, 2)}
-        </pre>
-      )}
-      {viewMode !== "tables" && results && results.entities && (
-        <div className="grid grid-cols-2 gap-4">
-          <DocumentPreview file={currentFile} entities={results.entities} />
-          <EntityTable entities={results.entities} />
+    <div className="min-h-screen bg-gray-50 p-4 md:p-8">
+      <NotificationSystem />
+      <div className="max-w-6xl mx-auto">
+        <header className="mb-8">
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-800">Document Data Extractor</h1>
+          <p className="text-gray-600">Upload PDFs/images to extract structured data</p>
+        </header>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Left Column */}
+          <div className="lg:col-span-1 space-y-6">
+            <div className="bg-white rounded-lg shadow p-6">
+              <h2 className="text-xl font-semibold mb-4">Upload Document</h2>
+              <FileUpload onUpload={handleFileUpload} disabled={isLoading} />
+              <p className="mt-3 text-sm text-gray-500">
+                Supports PDF, JPG, PNG (max 10MB)
+              </p>
+              
+              {/* View Mode Toggle (teammate's feature) */}
+              {results && (
+                <div className="mt-4">
+                  <h3 className="font-medium mb-2">View Mode:</h3>
+                  <div className="flex space-x-2">
+                    {['all', 'entities', 'tables'].map(mode => (
+                      <button
+                        key={mode}
+                        className={`px-3 py-1 text-sm rounded ${
+                          viewMode === mode
+                            ? 'bg-blue-500 text-white'
+                            : 'bg-gray-200 text-gray-700'
+                        }`}
+                        onClick={() => setViewMode(mode)}
+                      >
+                        {mode.charAt(0).toUpperCase() + mode.slice(1)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            {results && currentFile && (
+              <div className="bg-white rounded-lg shadow p-6">
+                <h2 className="text-xl font-semibold mb-4">Document Preview</h2>
+                <DocumentPreview file={currentFile} />
+                
+                <div className="mt-4">
+                  <button 
+                    onClick={exportCSV}
+                    className="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded"
+                  >
+                    Export as CSV
+                  </button>
+                </div>
+                
+                <div className="mt-4">
+                  <p><span className="font-medium">Pages Processed:</span> {results.page_count}</p>
+                  {results.partial && (
+                    <p className="text-yellow-600 mt-2">
+                      Only first 3 pages processed
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Right Column */}
+          <div className="lg:col-span-2 space-y-6">
+            <div className="bg-white rounded-lg shadow p-6">
+              <h2 className="text-xl font-semibold mb-4">Processing Pipeline</h2>
+              <Pipeline status={pipelineStatus} />
+            </div>
+
+            {results && (
+              <div className="bg-white rounded-lg shadow p-6">
+                <h2 className="text-xl font-semibold mb-4">Extracted Data</h2>
+                <ResultsDisplay 
+                  data={results} 
+                  viewMode={viewMode} // Pass view mode to results
+                />
+              </div>
+            )}
+          </div>
         </div>
-      )}
-      {viewMode === "tables" && results && results.tables && <TableRenderer tables={results.tables} />}
-      <button onClick={() => exportCSV(results)} className="mt-4 bg-blue-500 text-white p-2 rounded">
-        Export as CSV
-      </button>
+      </div>
     </div>
   );
 }

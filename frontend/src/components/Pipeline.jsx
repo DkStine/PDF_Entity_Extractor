@@ -1,41 +1,81 @@
-// src/components/Pipeline.jsx
 import ReactFlow, { Controls } from 'reactflow';
 import 'reactflow/dist/style.css';
 
-const nodeStyle = "px-4 py-2 bg-blue-100 rounded border border-blue-300";
+export default function Pipeline({ status }) {
+  // Status: 'idle', 'processing', 'complete', 'error'
+  const nodeStatus = {
+    upload: status === 'idle' ? 'pending' : status === 'error' ? 'error' : 'complete',
+    processing: ['processing', 'complete', 'error'].includes(status) 
+      ? (status === 'processing' ? 'active' : status) 
+      : 'pending',
+    output: status === 'complete' ? 'complete' : 'pending'
+  };
 
-const nodes = [
-  { 
-    id: 'upload', 
-    position: { x: 0, y: 0 }, 
-    data: { label: <div className={nodeStyle}>📥 PDF/Image Upload</div> } 
-  },
-  { 
-    id: 'process', 
-    position: { x: 250, y: 0 }, 
-    data: { label: <div className={nodeStyle}>⚙ OlmOCR Processing</div> } 
-  },
-  { 
-    id: 'output', 
-    position: { x: 500, y: 0 }, 
-    data: { label: <div className={nodeStyle}>📊 Structured Output</div> } 
-  }
-];
+  const statusColors = {
+    pending: 'bg-gray-200 border-gray-400',
+    active: 'bg-yellow-300 border-yellow-500 animate-pulse',
+    complete: 'bg-green-300 border-green-500',
+    error: 'bg-red-300 border-red-500'
+  };
 
-const edges = [
-  { id: 'e1', source: 'upload', target: 'process' },
-  { id: 'e2', source: 'process', target: 'output' }
-];
+  const nodes = [
+    {
+      id: 'upload',
+      position: { x: 0, y: 0 },
+      data: { 
+        label: (
+          <div className="flex items-center">
+            <div className={`w-3 h-3 rounded-full mr-2 ${statusColors[nodeStatus.upload].replace('bg-', 'bg-').replace('border-', '')}`}></div>
+            <span>PDF/Image Upload</span>
+          </div>
+        )
+      },
+      className: `px-4 py-2 rounded-lg border-2 ${statusColors[nodeStatus.upload]}`
+    },
+    {
+      id: 'process',
+      position: { x: 200, y: 0 },
+      data: { 
+        label: (
+          <div className="flex items-center">
+            <div className={`w-3 h-3 rounded-full mr-2 ${statusColors[nodeStatus.processing].replace('bg-', 'bg-').replace('border-', '')}`}></div>
+            <span>OlmOCR Processing</span>
+          </div>
+        )
+      },
+      className: `px-4 py-2 rounded-lg border-2 ${statusColors[nodeStatus.processing]}`
+    },
+    {
+      id: 'output',
+      position: { x: 400, y: 0 },
+      data: { 
+        label: (
+          <div className="flex items-center">
+            <div className={`w-3 h-3 rounded-full mr-2 ${statusColors[nodeStatus.output].replace('bg-', 'bg-').replace('border-', '')}`}></div>
+            <span>Structured Output</span>
+          </div>
+        )
+      },
+      className: `px-4 py-2 rounded-lg border-2 ${statusColors[nodeStatus.output]}`
+    }
+  ];
 
-export default function Pipeline() {
+  const edges = [
+    { id: 'e1-2', source: 'upload', target: 'process', animated: status === 'processing' },
+    { id: 'e2-3', source: 'process', target: 'output', animated: status === 'processing' }
+  ];
+
   return (
     <div className="h-64 my-6 border rounded-lg">
       <ReactFlow 
         nodes={nodes} 
         edges={edges} 
         fitView
+        nodesDraggable={false}
+        nodesConnectable={false}
+        zoomOnScroll={false}
       >
-        <Controls />
+        <Controls showInteractive={false} />
       </ReactFlow>
     </div>
   );
