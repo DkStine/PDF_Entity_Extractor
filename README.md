@@ -17,7 +17,7 @@
 
 ## Directory Structure
 
-![alt text](<Screenshot 2025-07-13 224435.png>)
+![Directory Structure](<Directory Structure.png>)
 
 ## Installation
 
